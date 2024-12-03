@@ -5,15 +5,16 @@ from dash.dependencies import Input, Output, State
 import plotly.graph_objects as go
 import pandas as pd
 from datetime import datetime
-import os
+# import os
 
 # Set up the data path and read the data
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-data_file_path = os.path.join(project_root, 'data', 'covid_data.csv')
+# project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# data_file_path = os.path.join(project_root, 'data', 'covid_data.csv')
 
 print("Loading data...")
 # Read the data and convert date column to datetime
-df = pd.read_csv(data_file_path)
+# df = pd.read_csv("https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/owid-covid-data.csv")
+df = pd.read_csv("./data/covid_data.csv")
 df['date'] = pd.to_datetime(df['date'])
 
 # Remove Antarctica and limit date
@@ -35,7 +36,8 @@ def prepare_map_data(date_data):
 
 # Create the Dash application
 app = dash.Dash(__name__)
-server = app.server
+#! For Deployment only
+# server = app.server
 
 # Define the layout of our dashboard
 app.layout = html.Div([
@@ -227,4 +229,5 @@ def update_map(selected_index):
 
 # Run the server
 if __name__ == '__main__':
-    app.run_server(debug=False)
+    print("Starting dashboard server...")
+    app.run_server(debug=True)
