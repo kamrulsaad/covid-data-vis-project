@@ -35,6 +35,7 @@ def prepare_map_data(date_data):
 
 # Create the Dash application
 app = dash.Dash(__name__)
+server = app.server
 
 # Define the layout of our dashboard
 app.layout = html.Div([
@@ -226,5 +227,4 @@ def update_map(selected_index):
 
 # Run the server
 if __name__ == '__main__':
-    print("Starting dashboard server...")
-    app.run_server(debug=True)
+    app.run_server(debug=False)
