@@ -1,0 +1,7 @@
+pandas==2.0.0
+numpy==1.24.0
+plotly==5.14.0
+dash==2.9.0
+geopandas==0.13.0
+folium==0.14.0
+country_converter==1.0.0
