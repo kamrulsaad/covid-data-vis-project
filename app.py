@@ -1,47 +1,65 @@
-# Import necessary libraries
+import os
 import dash
 from dash import html, dcc
 from dash.dependencies import Input, Output, State
 import plotly.graph_objects as go
 import pandas as pd
 from datetime import datetime
-# import os
+from flask_caching import Cache
 
-# Set up the data path and read the data
-# project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# data_file_path = os.path.join(project_root, 'data', 'covid_data.csv')
+# Setup paths and initialize app
+current_dir = os.path.dirname(os.path.abspath(__file__))
+data_file_path = os.path.join(current_dir, 'data', 'covid_data.csv')
 
-print("Loading data...")
-# Read the data and convert date column to datetime
-# df = pd.read_csv("https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/owid-covid-data.csv")
-df = pd.read_csv("./data/covid_data.csv")
-df['date'] = pd.to_datetime(df['date'])
-
-# Remove Antarctica and limit date
-df = df[df['continent'] != 'Antarctica']  # Remove Antarctica
-df = df[df['date'] <= '2024-06-17']      # Limit to June 17, 2024
-
-# Helper function to format numbers with commas and handle missing values
-def format_number(value):
-    if pd.isna(value):
-        return 'No data'
-    return f"{int(value):,}"
-
-# Helper function to prepare data for visualization
-def prepare_map_data(date_data):
-    """Prepares data for visualization by handling missing values"""
-    processed_data = date_data.copy()
-    processed_data['total_deaths_per_million'] = processed_data['total_deaths_per_million'].fillna(-1)
-    return processed_data
-
-# Create the Dash application
+# Initialize Dash app
 app = dash.Dash(__name__)
-#! For Deployment only
-# server = app.server
+server = app.server
 
-# Define the layout of our dashboard
+# Setup caching
+cache = Cache(app.server, config={
+    'CACHE_TYPE': 'filesystem',
+    'CACHE_DIR': 'cache-directory'
+})
+TIMEOUT = 3600
+
+@cache.memoize(timeout=TIMEOUT)
+def load_and_process_data():
+    """Load and pre-process data with caching"""
+    try:
+        print(f"Loading data from: {data_file_path}")
+        df = pd.read_csv(data_file_path)
+        df['date'] = pd.to_datetime(df['date'])
+        
+        # Filter data
+        df = df[df['date'] <= '2024-06-17']
+        df = df[df['continent'] != 'Antarctica']
+        
+        # Pre-process data for each date
+        dates = sorted(df['date'].unique())
+        processed_data = {}
+        
+        for date in dates:
+            date_data = df[df['date'] == date].copy()
+            date_data['total_deaths_per_million'] = date_data['total_deaths_per_million'].fillna(-1)
+            processed_data[pd.Timestamp(date)] = date_data
+            
+        return processed_data, dates
+    except Exception as e:
+        print(f"Error in data loading: {e}")
+        raise
+
+# Create cache directory if needed
+cache_dir = os.path.join(current_dir, 'cache-directory')
+os.makedirs(cache_dir, exist_ok=True)
+
+# Load data
+print("Loading and processing data...")
+PROCESSED_DATA, DATES = load_and_process_data()
+print("Data processing complete!")
+
+# Define layout
 app.layout = html.Div([
-    # Header section
+    # Header
     html.Div([
         html.H1(
             'COVID-19 Deaths per Million People',
@@ -65,29 +83,34 @@ app.layout = html.Div([
         )
     ], style={'height': '10vh'}),
     
-    # Time control panel
+    # Controls
     html.Div([
-        html.Button('▶ Play', 
-                   id='play-button',
-                   style={
-                       'marginRight': '10px',
-                       'padding': '3px 12px',
-                       'fontSize': '12px',
-                       'backgroundColor': '#1d4ed8',
-                       'color': 'white',
-                       'border': 'none',
-                       'borderRadius': '4px',
-                       'cursor': 'pointer'
-                   }),
+        # Play button
+        html.Button(
+            '▶ Play',
+            id='play-button',
+            style={
+                'marginRight': '10px',
+                'padding': '3px 12px',
+                'fontSize': '12px',
+                'backgroundColor': '#1d4ed8',
+                'color': 'white',
+                'border': 'none',
+                'borderRadius': '4px',
+                'cursor': 'pointer'
+            }
+        ),
+        
+        # Time slider and interval
         html.Div([
             dcc.Slider(
                 id='time-slider',
                 min=0,
-                max=len(df['date'].unique()) - 1,
-                value=len(df['date'].unique()) - 1,
+                max=len(DATES) - 1,
+                value=len(DATES) - 1,
                 marks={
                     i: date.strftime('%Y-%m')
-                    for i, date in enumerate(sorted(df['date'].unique()))
+                    for i, date in enumerate(DATES)
                     if i % 60 == 0
                 },
                 updatemode='drag'
@@ -110,7 +133,7 @@ app.layout = html.Div([
         'height': '8vh'
     }),
     
-    # Map container
+    # Map
     html.Div([
         dcc.Graph(
             id='covid-map',
@@ -118,7 +141,7 @@ app.layout = html.Div([
                 'height': '77vh',
                 'width': '100%'
             },
-            config={'displayModeBar': False}  # Remove the plotly mode bar
+            config={'displayModeBar': False}
         )
     ], style={
         'display': 'flex',
@@ -134,7 +157,7 @@ app.layout = html.Div([
     'overflow': 'hidden'
 })
 
-# Callback to handle play/pause functionality
+# Callback for play/pause button
 @app.callback(
     [Output('interval-component', 'disabled'),
      Output('play-button', 'children')],
@@ -146,7 +169,7 @@ def toggle_animation(n_clicks, current_disabled):
         return True, '▶ Play'
     return not current_disabled, '⏸ Pause' if current_disabled else '▶ Play'
 
-# Callback to update the slider during animation
+# Callback for time slider animation
 @app.callback(
     Output('time-slider', 'value'),
     [Input('interval-component', 'n_intervals'),
@@ -156,28 +179,24 @@ def toggle_animation(n_clicks, current_disabled):
 def update_time_slider(n_intervals, slider_value, disabled):
     if disabled:
         return slider_value
-    max_value = len(df['date'].unique()) - 1
-    return (slider_value + 1) % max_value
+    return (slider_value + 1) % len(DATES)
 
-# Callback to update the map
+# Callback for map updates
 @app.callback(
     Output('covid-map', 'figure'),
     [Input('time-slider', 'value')]
 )
 def update_map(selected_index):
-    dates = sorted(df['date'].unique())
-    selected_date = dates[selected_index]
-    
-    date_data = df[df['date'] == selected_date].copy()
-    date_data = prepare_map_data(date_data)
+    selected_date = DATES[selected_index]
+    date_data = PROCESSED_DATA[pd.Timestamp(selected_date)]
     
     fig = go.Figure(data=go.Choropleth(
         locations=date_data['iso_code'],
-        z=date_data['total_deaths_per_million'],  # Changed to deaths per million
+        z=date_data['total_deaths_per_million'],
         text=date_data.apply(
             lambda x: f"Country: {x['location']}<br>"
-                     f"Deaths per Million: {format_number(x['total_deaths_per_million'])}<br>"
-                     f"Total Deaths: {format_number(x['total_deaths'])}",
+                     f"Deaths per Million: {int(x['total_deaths_per_million']) if x['total_deaths_per_million'] >= 0 else 'No data'}<br>"
+                     f"Total Deaths: {int(x['total_deaths']) if pd.notna(x['total_deaths']) else 'No data'}",
             axis=1
         ),
         colorscale=[
@@ -201,7 +220,7 @@ def update_map(selected_index):
             tickfont=dict(size=10)
         ),
         zmin=-1,
-        zmax=4000  # Adjusted for deaths per million scale
+        zmax=4000
     ))
     
     fig.update_layout(
@@ -227,7 +246,6 @@ def update_map(selected_index):
     
     return fig
 
-# Run the server
 if __name__ == '__main__':
     print("Starting dashboard server...")
     app.run_server(debug=True)

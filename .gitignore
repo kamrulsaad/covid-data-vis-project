@@ -14,3 +14,6 @@ data/*.csv
 # IDE specific files
 .vscode/
 .idea/
+
+# Flask Caching Dir
+cache-directory/
