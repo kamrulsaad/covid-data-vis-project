@@ -6,16 +6,23 @@ import plotly.graph_objects as go
 import pandas as pd
 from datetime import datetime
 from flask_caching import Cache
+import dash_bootstrap_components as dbc
 
 # Setup paths and initialize app
 current_dir = os.path.dirname(os.path.abspath(__file__))
 data_file_path = os.path.join(current_dir, 'data', 'covid_data.csv')
 
-# Initialize Dash app
-app = dash.Dash(__name__)
+# Initialize Dash app with Bootstrap theme
+app = dash.Dash(
+    __name__,
+    external_stylesheets=[dbc.themes.BOOTSTRAP],
+    meta_tags=[
+        {"name": "viewport", "content": "width=device-width, initial-scale=1"}
+    ]
+)
 server = app.server
 
-# Setup caching
+# Setup caching (same as before)
 cache = Cache(app.server, config={
     'CACHE_TYPE': 'filesystem',
     'CACHE_DIR': 'cache-directory'
@@ -57,107 +64,138 @@ print("Loading and processing data...")
 PROCESSED_DATA, DATES = load_and_process_data()
 print("Data processing complete!")
 
-# Define layout
-app.layout = html.Div([
-    # Header
-    html.Div([
-        html.H1(
-            'COVID-19 Deaths per Million People',
-            style={
-                'textAlign': 'center',
-                'color': '#2c3e50',
-                'fontSize': '20px',
-                'fontWeight': 'normal',
-                'marginBottom': '5px',
-                'padding': '10px 10% 0 10%'
+# Custom CSS with new tooltip styles
+app.index_string = '''
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>COVID-19 Dashboard</title>
+        {%favicon%}
+        {%css%}
+        <style>
+            body {
+                background-color: #f8f9fa;
+                margin: 0;
+                padding: 0;
             }
-        ),
-        html.P(
-            'Visualization shows the cumulative COVID-19 deaths per million people for each country over time.',
-            style={
-                'textAlign': 'center',
-                'color': '#666666',
-                'fontSize': '12px',
-                'marginBottom': '10px'
+            .dashboard-container {
+                background-color: white;
+                box-shadow: 0 0 15px rgba(0,0,0,0.1);
+                border-radius: 8px;
             }
-        )
-    ], style={'height': '10vh'}),
-    
-    # Controls
-    html.Div([
-        # Play button
-        html.Button(
-            '▶ Play',
-            id='play-button',
-            style={
-                'marginRight': '10px',
-                'padding': '3px 12px',
-                'fontSize': '12px',
-                'backgroundColor': '#1d4ed8',
-                'color': 'white',
-                'border': 'none',
-                'borderRadius': '4px',
-                'cursor': 'pointer'
+            .control-panel {
+                background-color: white;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             }
-        ),
-        
-        # Time slider and interval
-        html.Div([
-            dcc.Slider(
-                id='time-slider',
-                min=0,
-                max=len(DATES) - 1,
-                value=len(DATES) - 1,
-                marks={
-                    i: date.strftime('%Y-%m')
-                    for i, date in enumerate(DATES)
-                    if i % 60 == 0
-                },
-                updatemode='drag'
-            ),
-            dcc.Interval(
-                id='interval-component',
-                interval=100,
-                n_intervals=0,
-                disabled=True
-            ),
-        ], style={'width': '100%', 'padding': '0 20px'})
-    ], style={
-        'width': '80%',
-        'margin': '10px auto',
-        'padding': '10px',
-        'backgroundColor': '#f8f9fa',
-        'borderRadius': '5px',
-        'display': 'flex',
-        'alignItems': 'center',
-        'height': '8vh'
-    }),
-    
-    # Map
-    html.Div([
-        dcc.Graph(
-            id='covid-map',
-            style={
-                'height': '77vh',
-                'width': '100%'
-            },
-            config={'displayModeBar': False}
-        )
-    ], style={
-        'display': 'flex',
-        'justifyContent': 'center',
-        'alignItems': 'center',
-        'width': '100%',
-        'height': '77vh'
-    })
-], style={
-    'height': '100vh',
-    'width': '100%',
-    'backgroundColor': '#ffffff',
-    'overflow': 'hidden'
-})
+            .play-button {
+                transition: all 0.3s ease;
+            }
+            .play-button:hover {
+                transform: scale(1.05);
+            }
+            /* Updated tooltip styles */
+            .js-plotly-plot .plotly .hoverlayer {
+                pointer-events: none !important;
+            }
+            .js-plotly-plot .plotly .hovertext {
+                background-color: white !important;
+                border: 1px solid #E2E8F0 !important;
+                border-radius: 6px !important;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+                padding: 8px 12px !important;
+                font-family: system-ui, -apple-system, sans-serif !important;
+            }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+'''
 
-# Callback for play/pause button
+# Layout remains the same
+app.layout = dbc.Container([
+    # Header Row
+    dbc.Row([
+        dbc.Col([
+            html.H1('COVID-19 Deaths per Million People',
+                   className='text-center text-primary mb-0 fw-bold',
+                   style={'fontSize': '24px'}),
+            html.P('Interactive visualization of cumulative COVID-19 deaths per million people globally',
+                  className='text-center text-muted mb-3',
+                  style={'fontSize': '14px'})
+        ], width=12)
+    ], className='mt-3'),
+    
+    # Controls Row
+    dbc.Row([
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Button(
+                                '▶ Play',
+                                id='play-button',
+                                color='primary',
+                                className='play-button me-2',
+                                style={'width': '100px'}
+                            )
+                        ], width=2),
+                        dbc.Col([
+                            dcc.Slider(
+                                id='time-slider',
+                                min=0,
+                                max=len(DATES) - 1,
+                                value=len(DATES) - 1,
+                                marks={
+                                    i: date.strftime('%Y-%m')
+                                    for i, date in enumerate(DATES)
+                                    if i % 60 == 0
+                                },
+                                updatemode='drag',
+                                className='mt-2'
+                            )
+                        ], width=10)
+                    ]),
+                    dcc.Interval(
+                        id='interval-component',
+                        interval=100,
+                        n_intervals=0,
+                        disabled=True
+                    )
+                ])
+            ], className='control-panel')
+        ], width=12)
+    ], className='mb-3'),
+    
+    # Map Row
+    dbc.Row([
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    dcc.Graph(
+                        id='covid-map',
+                        style={'height': 'calc(100vh - 250px)'},
+                        config={
+                            'displayModeBar': False,
+                            'scrollZoom': True
+                        }
+                    )
+                ], className='p-0')
+            ], className='dashboard-container')
+        ], width=12)
+    ])
+], fluid=True, className='vh-100 p-3')
+
+# Callbacks for play/pause button and slider remain the same
 @app.callback(
     [Output('interval-component', 'disabled'),
      Output('play-button', 'children')],
@@ -169,7 +207,6 @@ def toggle_animation(n_clicks, current_disabled):
         return True, '▶ Play'
     return not current_disabled, '⏸ Pause' if current_disabled else '▶ Play'
 
-# Callback for time slider animation
 @app.callback(
     Output('time-slider', 'value'),
     [Input('interval-component', 'n_intervals'),
@@ -181,7 +218,6 @@ def update_time_slider(n_intervals, slider_value, disabled):
         return slider_value
     return (slider_value + 1) % len(DATES)
 
-# Callback for map updates
 @app.callback(
     Output('covid-map', 'figure'),
     [Input('time-slider', 'value')]
@@ -193,22 +229,27 @@ def update_map(selected_index):
     fig = go.Figure(data=go.Choropleth(
         locations=date_data['iso_code'],
         z=date_data['total_deaths_per_million'],
-        text=date_data.apply(
-            lambda x: f"Country: {x['location']}<br>"
-                     f"Deaths per Million: {int(x['total_deaths_per_million']) if x['total_deaths_per_million'] >= 0 else 'No data'}<br>"
-                     f"Total Deaths: {int(x['total_deaths']) if pd.notna(x['total_deaths']) else 'No data'}",
-            axis=1
+        customdata=date_data[['location', 'total_deaths']],
+        hovertemplate=(
+            "<b>%{customdata[0]}</b><br>" +
+            f"Date: {selected_date.strftime('%B %d, %Y')}<br>" +
+            "Deaths per Million: %{z:,.1f}<br>" +
+            "Total Deaths: %{customdata[1]:,.0f}" +
+            "<extra></extra>"
         ),
         colorscale=[
-            [0, '#ffffff'],      # No data (white)
-            [0.1, '#fee5d9'],    # Lightest red
-            [0.3, '#fcae91'],    # Light red
-            [0.5, '#fb6a4a'],    # Medium red
-            [0.7, '#de2d26'],    # Dark red
-            [1.0, '#a50f15']     # Darkest red
+            [0, '#ffffff'],
+            [0.1, '#fee5d9'],
+            [0.3, '#fcae91'],
+            [0.5, '#fb6a4a'],
+            [0.7, '#de2d26'],
+            [1.0, '#a50f15']
         ],
         colorbar=dict(
-            title="Deaths per Million",
+            title=dict(
+                text="Deaths per Million",
+                font=dict(size=12)
+            ),
             thickness=15,
             len=0.5,
             x=1.0,
@@ -240,8 +281,13 @@ def update_map(selected_index):
         margin=dict(l=0, r=0, t=0, b=0),
         paper_bgcolor='white',
         plot_bgcolor='white',
-        height=700,
-        width=None
+        hoverlabel=dict(
+            bgcolor="white",
+            font_size=14,
+            font_family="system-ui, -apple-system, sans-serif"
+        ),
+        # Enable smooth transitions
+        transition_duration=300
     )
     
     return fig
